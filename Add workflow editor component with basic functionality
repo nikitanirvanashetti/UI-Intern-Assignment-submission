@@ -1,0 +1,138 @@
+import { useState, useEffect } from "react";
+import { v4 as uuidv4 } from "uuid";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { motion } from "framer-motion";
+import { Edit, Trash, PlusCircle, Download, Upload, Link, ZoomIn, ZoomOut } from "lucide-react";
+import { Line } from "react-konva";
+
+export default function WorkflowEditor() {
+  const [nodes, setNodes] = useState([]);
+  const [connections, setConnections] = useState([]);
+  const [scale, setScale] = useState(1);
+
+  useEffect(() => {
+    const savedNodes = localStorage.getItem("workflowNodes");
+    const savedConnections = localStorage.getItem("workflowConnections");
+    if (savedNodes) setNodes(JSON.parse(savedNodes));
+    if (savedConnections) setConnections(JSON.parse(savedConnections));
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("workflowNodes", JSON.stringify(nodes));
+    localStorage.setItem("workflowConnections", JSON.stringify(connections));
+  }, [nodes, connections]);
+
+  const addNode = (x = 150, y = nodes.length * 100 + 50) => {
+    setNodes([...nodes, { id: uuidv4(), title: "New Node", description: "Edit me", x, y, color: "bg-white" }]);
+  };
+
+  const editNode = (id) => {
+    const newTitle = prompt("Enter new title:");
+    const newDescription = prompt("Enter new description:");
+    if (newTitle && newDescription) {
+      setNodes(nodes.map(node => node.id === id ? { ...node, title: newTitle, description: newDescription } : node));
+    }
+  };
+
+  const deleteNode = (id) => {
+    setNodes(nodes.filter(node => node.id !== id));
+    setConnections(connections.filter(conn => conn.from !== id && conn.to !== id));
+  };
+
+  const connectNodes = (from, to) => {
+    setConnections([...connections, { from, to }]);
+  };
+
+  const exportWorkflow = () => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ nodes, connections }));
+    const downloadAnchor = document.createElement("a");
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", "workflow.json");
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    document.body.removeChild(downloadAnchor);
+  };
+
+  const importWorkflow = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const importedData = JSON.parse(e.target.result);
+      setNodes(importedData.nodes);
+      setConnections(importedData.connections);
+    };
+    reader.readAsText(file);
+  };
+
+  return (
+    <div className="relative w-full h-screen bg-gray-100 p-5 flex flex-col items-center">
+      <div className="flex gap-3 mb-3">
+        <Button onClick={() => addNode()}>Add Node</Button>
+        <Button onClick={exportWorkflow} className="flex items-center gap-2">
+          <Download className="w-4 h-4" /> Export
+        </Button>
+        <input type="file" accept=".json" onChange={importWorkflow} className="hidden" id="fileInput" />
+        <Button onClick={() => document.getElementById("fileInput").click()} className="flex items-center gap-2">
+          <Upload className="w-4 h-4" /> Import
+        </Button>
+        <Button onClick={() => setScale(scale + 0.1)} className="flex items-center gap-2">
+          <ZoomIn className="w-4 h-4" /> Zoom In
+        </Button>
+        <Button onClick={() => setScale(scale - 0.1)} className="flex items-center gap-2">
+          <ZoomOut className="w-4 h-4" /> Zoom Out
+        </Button>
+      </div>
+      <div className="relative w-full h-full border rounded-lg bg-white p-5 shadow-md overflow-hidden">
+        <motion.div style={{ transform: `scale(${scale})` }}>
+          {connections.map((conn, index) => {
+            const fromNode = nodes.find(node => node.id === conn.from);
+            const toNode = nodes.find(node => node.id === conn.to);
+            return fromNode && toNode ? (
+              <Line
+                key={index}
+                points={[fromNode.x + 50, fromNode.y + 30, toNode.x + 50, toNode.y + 30]}
+                stroke="black"
+                strokeWidth={2}
+                dash={[5, 5]}
+              />
+            ) : null;
+          })}
+          {nodes.map((node) => (
+            <motion.div
+              key={node.id}
+              drag
+              dragConstraints={{ left: 0, right: 800, top: 0, bottom: 500 }}
+              className={`absolute p-3 shadow-lg rounded-lg border border-gray-300 flex flex-col items-center ${node.color}`}
+              style={{ left: node.x, top: node.y }}
+            >
+              <Card className="w-48">
+                <CardContent>
+                  <div className="flex flex-col items-center text-center">
+                    <h4 className="text-lg font-semibold">{node.title}</h4>
+                    <p className="text-sm text-gray-600">{node.description}</p>
+                    <div className="flex gap-2 mt-3">
+                      <Button size="icon" variant="ghost" onClick={() => editNode(node.id)}>
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button size="icon" variant="ghost" onClick={() => deleteNode(node.id)}>
+                        <Trash className="w-4 h-4 text-red-500" />
+                      </Button>
+                      <Button size="icon" variant="ghost" onClick={() => addNode(node.x + 100, node.y)}>
+                        <PlusCircle className="w-4 h-4 text-green-500" />
+                      </Button>
+                      <Button size="icon" variant="ghost" onClick={() => connectNodes(nodes[0].id, node.id)}>
+                        <Link className="w-4 h-4 text-blue-500" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          ))}
+        </motion.div>
+      </div>
+    </div>
+  );
+}
